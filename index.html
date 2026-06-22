@@ -213,6 +213,58 @@
         font-size: 14px;
         opacity: 0.72;
       }
+
+      .shop {
+        margin-top: 20px;
+        text-align: left;
+      }
+
+      .shop-title {
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.74;
+      }
+
+      .shop-wallet {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      .shop-grid {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .shop-item {
+        width: 100%;
+        margin-top: 0;
+        border-radius: 18px;
+        padding: 14px 16px;
+        text-align: left;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .shop-item:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+
+      .shop-item-title {
+        display: block;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .shop-item-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 13px;
+        line-height: 1.35;
+        opacity: 0.82;
+      }
     </style>
   </head>
   <body>
@@ -275,6 +327,28 @@
           <div class="card">
             <h2 id="gameOverTitle">Карась выбыл</h2>
             <p id="gameOverScore">Финальный счёт: 0</p>
+            <div class="shop">
+              <div class="shop-title">Между Забегами</div>
+              <div class="shop-wallet">Монеты: <span id="walletValue">0</span></div>
+              <div class="shop-grid">
+                <button class="shop-item" id="upgradeHealthButton" type="button">
+                  <span class="shop-item-title">Живучесть</span>
+                  <span class="shop-item-text">+10 HP навсегда в этой сессии</span>
+                </button>
+                <button class="shop-item" id="upgradeFireRateButton" type="button">
+                  <span class="shop-item-title">Темп Огня</span>
+                  <span class="shop-item-text">Чуть быстрее автоматическая стрельба</span>
+                </button>
+                <button class="shop-item" id="upgradeMagnetButton" type="button">
+                  <span class="shop-item-title">Магнит Монет</span>
+                  <span class="shop-item-text">Монеты начинают притягиваться издалека</span>
+                </button>
+                <button class="shop-item" id="upgradeSpeedButton" type="button">
+                  <span class="shop-item-title">Скорость</span>
+                  <span class="shop-item-text">Карась быстрее разгоняется и лучше маневрирует</span>
+                </button>
+              </div>
+            </div>
             <button id="restartButton" type="button">Повторить</button>
           </div>
         </div>

@@ -11,6 +11,8 @@ class Bullet {
     glow = null,
     spriteScale = 1,
     elongated = false,
+    explosionRadius = 0,
+    isRocket = false,
   }) {
     this.x = x;
     this.y = y;
@@ -23,6 +25,8 @@ class Bullet {
     this.glow = glow;
     this.spriteScale = spriteScale;
     this.elongated = elongated;
+    this.explosionRadius = explosionRadius;
+    this.isRocket = isRocket;
     this.active = true;
   }
 
@@ -39,6 +43,28 @@ class Bullet {
     if (this.glow) {
       ctx.shadowColor = this.glow;
       ctx.shadowBlur = 16;
+    }
+    if (this.isRocket) {
+      const angle = Math.atan2(this.velocityY, this.velocityX);
+      ctx.translate(this.x, this.y);
+      ctx.rotate(angle);
+      ctx.fillStyle = this.tint || "#fb923c";
+      ctx.beginPath();
+      ctx.roundRect(-16 * this.spriteScale, -5 * this.spriteScale, 26 * this.spriteScale, 10 * this.spriteScale, 5 * this.spriteScale);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.arc(6 * this.spriteScale, 0, 3 * this.spriteScale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(253, 186, 116, 0.9)";
+      ctx.beginPath();
+      ctx.moveTo(-16 * this.spriteScale, 0);
+      ctx.lineTo(-25 * this.spriteScale, -4 * this.spriteScale);
+      ctx.lineTo(-25 * this.spriteScale, 4 * this.spriteScale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
     }
     if (assets?.atlasImage) {
       const sprite = assets.spriteMap.bullet;

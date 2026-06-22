@@ -22,11 +22,13 @@ class Obstacle {
     this.scoreValue = scoreValue;
     this.width = (kind === "hook" ? 32 : kind === "chest" ? 54 : 66) * scale;
     this.height = (kind === "hook" ? 62 : kind === "chest" ? 48 : 44) * scale;
+    this.flashTimer = 0;
     this.active = true;
   }
 
   update(delta) {
     this.x -= this.speed * delta;
+    this.flashTimer = Math.max(0, this.flashTimer - delta);
     if (this.x + this.width < -48) {
       this.active = false;
     }
@@ -37,6 +39,7 @@ class Obstacle {
       return false;
     }
     this.health -= amount;
+    this.flashTimer = 0.09;
     if (this.health <= 0) {
       this.active = false;
       return true;
@@ -47,6 +50,9 @@ class Obstacle {
   draw(ctx, assets) {
     ctx.save();
     ctx.translate(this.x, this.y);
+    if (this.flashTimer > 0) {
+      ctx.filter = "brightness(2.6) saturate(0.2)";
+    }
     if (this.kind === "chest" && assets?.chestImage) {
       ctx.drawImage(
         assets.chestImage,
@@ -90,6 +96,14 @@ class Obstacle {
         ctx.lineTo(this.width * 0.14 + i * 6, this.height * 0.22);
         ctx.stroke();
       }
+    }
+
+    if (this.flashTimer > 0) {
+      ctx.globalAlpha = Math.min(0.38, this.flashTimer * 4.5);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.width * 0.56, this.height * 0.56, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();

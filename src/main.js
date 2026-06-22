@@ -63,6 +63,11 @@ async function bootstrap() {
         gameOverOverlay: document.getElementById("gameOverOverlay"),
         gameOverTitle: document.getElementById("gameOverTitle"),
         gameOverScore: document.getElementById("gameOverScore"),
+        walletValue: document.getElementById("walletValue"),
+        upgradeHealthButton: document.getElementById("upgradeHealthButton"),
+        upgradeFireRateButton: document.getElementById("upgradeFireRateButton"),
+        upgradeMagnetButton: document.getElementById("upgradeMagnetButton"),
+        upgradeSpeedButton: document.getElementById("upgradeSpeedButton"),
         restartButton,
       },
     });

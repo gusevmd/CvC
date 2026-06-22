@@ -13,6 +13,12 @@ function rectOverlap(a, b) {
   );
 }
 
+function circleOverlap(a, b, radius) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
 class GameScene {
   constructor({ canvas, ui, assets }) {
     this.canvas = canvas;
@@ -53,6 +59,7 @@ class GameScene {
     this.selectedMode = "campaign";
     this.score = 0;
     this.coins = 0;
+    this.wallet = 0;
     this.survivalScoreAccumulator = 0;
     this.elapsed = 0;
     this.lastTime = 0;
@@ -63,9 +70,93 @@ class GameScene {
       healing: 7,
       upgrade: 14,
     };
-    this.campaignBossTime = 34;
+    this.campaignStages = [
+      {
+        id: "warmup",
+        title: "Разогрев",
+        duration: 18,
+        enemyWeights: { swimmer: 1 },
+        maxEnemies: 3,
+        maxShooters: 0,
+        maxGrunts: 0,
+        maxBazookas: 0,
+        maxObstacles: 1,
+        allowObstacles: true,
+        chestChance: 0,
+      },
+      {
+        id: "crossfire",
+        title: "Перекрёстный огонь",
+        duration: 20,
+        enemyWeights: { swimmer: 0.6, shooter: 0.4 },
+        maxEnemies: 4,
+        maxShooters: 1,
+        maxGrunts: 0,
+        maxBazookas: 0,
+        maxObstacles: 1,
+        allowObstacles: true,
+        chestChance: 0.08,
+      },
+      {
+        id: "gunline",
+        title: "Пулемётная линия",
+        duration: 20,
+        enemyWeights: { swimmer: 0.4, shooter: 0.25, grunt: 0.35 },
+        maxEnemies: 4,
+        maxShooters: 1,
+        maxGrunts: 1,
+        maxBazookas: 0,
+        maxObstacles: 2,
+        allowObstacles: true,
+        chestChance: 0.14,
+      },
+      {
+        id: "demolition",
+        title: "Подрывники",
+        duration: 18,
+        enemyWeights: { swimmer: 0.25, shooter: 0.2, grunt: 0.25, bazooka: 0.3 },
+        maxEnemies: 4,
+        maxShooters: 1,
+        maxGrunts: 1,
+        maxBazookas: 1,
+        maxObstacles: 1,
+        allowObstacles: true,
+        chestChance: 0.18,
+      },
+      {
+        id: "preboss",
+        title: "Перед Штурмом",
+        duration: 10,
+        enemyWeights: { swimmer: 0.6, shooter: 0.4 },
+        maxEnemies: 2,
+        maxShooters: 1,
+        maxGrunts: 0,
+        maxBazookas: 0,
+        maxObstacles: 0,
+        allowObstacles: false,
+        chestChance: 0,
+      },
+    ];
+    this.campaignBossTime = this.campaignStages.reduce((sum, stage) => sum + stage.duration, 0);
     this.bossLootTimer = 0;
     this.chestSpawnedThisRun = false;
+    this.rewardGranted = false;
+    this.bossBandageDropped = false;
+    this.currentCampaignStageId = this.campaignStages[0].id;
+    this.stageBannerText = this.campaignStages[0].title;
+    this.stageBannerTimer = 2.4;
+    this.metaUpgrades = {
+      healthLevel: 0,
+      fireRateLevel: 0,
+      magnetLevel: 0,
+      speedLevel: 0,
+    };
+    this.shopConfig = {
+      health: { costBase: 12, costStep: 8 },
+      fireRate: { costBase: 14, costStep: 10 },
+      magnet: { costBase: 10, costStep: 7 },
+      speed: { costBase: 11, costStep: 8 },
+    };
 
     this.input = {
       pointerHeld: false,
@@ -75,7 +166,9 @@ class GameScene {
     };
 
     this.bindInput();
+    this.bindShop();
     this.updateHud();
+    this.updateShopUi();
   }
 
   bindInput() {
@@ -136,7 +229,10 @@ class GameScene {
   }
 
   startGame() {
-    this.players.forEach((player) => player.applyClass(this.selectedClassId));
+    this.players.forEach((player) => {
+      player.setMetaUpgrades(this.metaUpgrades);
+      player.applyClass(this.selectedClassId);
+    });
     this.resetWorld();
     this.state = "running";
     this.ui.startOverlay.hidden = true;
@@ -167,30 +263,41 @@ class GameScene {
     this.coins = 0;
     this.bossLootTimer = 0;
     this.chestSpawnedThisRun = false;
+    this.rewardGranted = false;
+    this.bossBandageDropped = false;
+    this.currentCampaignStageId = this.campaignStages[0].id;
+    this.stageBannerText = this.campaignStages[0].title;
+    this.stageBannerTimer = this.selectedMode === "campaign" ? 2.4 : 0;
     this.spawnTimers.enemy = 1.4;
     this.spawnTimers.obstacle = 1.1;
     this.spawnTimers.healing = 7;
     this.spawnTimers.upgrade = 14;
     this.players.forEach((player, index) => {
+      player.setMetaUpgrades(this.metaUpgrades);
       player.reset(this.canvas.height * (0.36 + index * 0.16));
     });
     this.updateHud();
+    this.updateShopUi();
   }
 
   gameOver() {
+    this.finishRunRewards();
     this.state = "gameover";
     this.ui.gameOverOverlay.hidden = false;
     this.ui.gameOverTitle.textContent = "Карась выбыл";
     this.ui.gameOverScore.textContent = `Финальный счёт: ${Math.floor(this.score)}`;
     this.ui.restartButton.textContent = "Повторить";
+    this.updateShopUi();
   }
 
   victory() {
+    this.finishRunRewards();
     this.state = "victory";
     this.ui.gameOverOverlay.hidden = false;
     this.ui.gameOverTitle.textContent = "Босс побеждён";
     this.ui.gameOverScore.textContent = `Счёт: ${Math.floor(this.score)} · Монеты: ${this.coins}`;
     this.ui.restartButton.textContent = "Играть снова";
+    this.updateShopUi();
   }
 
   loop(time) {
@@ -215,6 +322,7 @@ class GameScene {
     }
 
     this.elapsed += delta;
+    this.stageBannerTimer = Math.max(0, this.stageBannerTimer - delta);
     this.survivalScoreAccumulator += delta * (this.selectedMode === "endless" ? 8 : this.boss ? 0 : 8);
     if (this.survivalScoreAccumulator >= 1) {
       const points = Math.floor(this.survivalScoreAccumulator);
@@ -224,6 +332,7 @@ class GameScene {
 
     const difficulty = 1 + Math.min(this.elapsed / 50, 1.8);
     const movement = this.getMovementInput();
+    this.updateCampaignStage();
 
     this.players.forEach((player) => {
       player.update(delta, this.canvas.width, this.canvas.height, movement);
@@ -245,12 +354,20 @@ class GameScene {
       } else {
         if (this.spawnTimers.enemy <= 0) {
           this.spawnEnemy(difficulty);
-          this.spawnTimers.enemy = Math.max(0.45, 1.55 - difficulty * 0.25 + Math.random() * 0.35);
+          const stage = this.getCurrentStageConfig();
+          const stageBias = this.selectedMode === "campaign" && stage
+            ? Math.max(0.52, 1.1 - (stage.maxEnemies - 2) * 0.12)
+            : 1;
+          this.spawnTimers.enemy = Math.max(0.45, (1.55 - difficulty * 0.25 + Math.random() * 0.35) * stageBias);
         }
 
         if (this.spawnTimers.obstacle <= 0) {
           this.spawnObstacle(difficulty);
-          this.spawnTimers.obstacle = Math.max(0.35, 1.25 - difficulty * 0.18 + Math.random() * 0.4);
+          const stage = this.getCurrentStageConfig();
+          const obstacleBias = this.selectedMode === "campaign" && stage && !stage.allowObstacles
+            ? 999
+            : 1;
+          this.spawnTimers.obstacle = Math.max(0.35, 1.25 - difficulty * 0.18 + Math.random() * 0.4) * obstacleBias;
         }
 
         if (this.spawnTimers.healing <= 0) {
@@ -268,20 +385,28 @@ class GameScene {
     this.bullets.forEach((bullet) => bullet.update(delta, this.canvas.width, this.canvas.height));
     this.enemyBullets.forEach((bullet) => bullet.update(delta, this.canvas.width, this.canvas.height));
     this.enemies.forEach((enemy) => {
-      enemy.update(delta);
-      if (enemy.canShoot()) {
-        this.enemyBullets.push(enemy.shoot());
+      const shots = enemy.update(delta, this.players[0]);
+      if (shots?.length) {
+        this.enemyBullets.push(...shots);
       }
     });
     if (this.boss?.active) {
       const bossShots = this.boss.update(delta, this.players[0]);
       this.enemyBullets.push(...bossShots);
+      if (!this.bossBandageDropped && this.boss.secondPhase) {
+        this.spawnHealingPickupAt({
+          x: this.canvas.width * 0.56,
+          y: this.canvas.height * 0.52,
+        });
+        this.bossBandageDropped = true;
+      }
     }
     this.obstacles.forEach((obstacle) => obstacle.update(delta));
     this.healingPickups.forEach((pickup) => pickup.update(delta));
     this.upgradePickups.forEach((pickup) => pickup.update(delta));
     this.coinPickups.forEach((pickup) => pickup.update(delta));
     this.effects.forEach((effect) => effect.update(delta));
+    this.applyCoinMagnet(delta);
 
     this.resolveBulletHits();
     this.resolvePlayerCollisions();
@@ -333,13 +458,221 @@ class GameScene {
     this.bossLootTimer = 6;
   }
 
+  getCurrentStageConfig() {
+    if (this.selectedMode !== "campaign") {
+      return null;
+    }
+
+    let elapsed = 0;
+    for (const stage of this.campaignStages) {
+      elapsed += stage.duration;
+      if (this.elapsed < elapsed) {
+        return stage;
+      }
+    }
+    return this.campaignStages[this.campaignStages.length - 1];
+  }
+
+  updateCampaignStage() {
+    if (this.selectedMode !== "campaign" || this.boss) {
+      return;
+    }
+
+    const stage = this.getCurrentStageConfig();
+    if (!stage || stage.id === this.currentCampaignStageId) {
+      return;
+    }
+
+    this.currentCampaignStageId = stage.id;
+    this.stageBannerText = stage.title;
+    this.stageBannerTimer = 2.2;
+  }
+
+  countEnemiesByKind(kind) {
+    return this.enemies.filter((enemy) => enemy.active && enemy.kind === kind).length;
+  }
+
+  bindShop() {
+    this.ui.upgradeHealthButton.addEventListener("click", () => this.buyUpgrade("health"));
+    this.ui.upgradeFireRateButton.addEventListener("click", () => this.buyUpgrade("fireRate"));
+    this.ui.upgradeMagnetButton.addEventListener("click", () => this.buyUpgrade("magnet"));
+    this.ui.upgradeSpeedButton.addEventListener("click", () => this.buyUpgrade("speed"));
+  }
+
+  getUpgradeCost(kind) {
+    const config = this.shopConfig[kind];
+    const level = kind === "health"
+      ? this.metaUpgrades.healthLevel
+      : kind === "fireRate"
+        ? this.metaUpgrades.fireRateLevel
+        : kind === "magnet"
+          ? this.metaUpgrades.magnetLevel
+          : this.metaUpgrades.speedLevel;
+    return config.costBase + level * config.costStep;
+  }
+
+  buyUpgrade(kind) {
+    if (this.state !== "gameover" && this.state !== "victory" && this.state !== "start") {
+      return;
+    }
+
+    const cost = this.getUpgradeCost(kind);
+    if (this.wallet < cost) {
+      return;
+    }
+
+    this.wallet -= cost;
+    if (kind === "health") {
+      this.metaUpgrades.healthLevel += 1;
+    } else if (kind === "fireRate") {
+      this.metaUpgrades.fireRateLevel += 1;
+    } else if (kind === "magnet") {
+      this.metaUpgrades.magnetLevel += 1;
+    } else if (kind === "speed") {
+      this.metaUpgrades.speedLevel += 1;
+    }
+
+    this.players.forEach((player) => player.setMetaUpgrades(this.metaUpgrades));
+    this.updateHud();
+    this.updateShopUi();
+  }
+
+  finishRunRewards() {
+    if (this.rewardGranted) {
+      return;
+    }
+    this.wallet += this.coins;
+    this.rewardGranted = true;
+  }
+
+  updateShopUi() {
+    const healthCost = this.getUpgradeCost("health");
+    const fireRateCost = this.getUpgradeCost("fireRate");
+    const magnetCost = this.getUpgradeCost("magnet");
+    const speedCost = this.getUpgradeCost("speed");
+
+    this.ui.walletValue.textContent = this.wallet;
+    this.ui.upgradeHealthButton.querySelector(".shop-item-title").textContent = `Живучесть Lv.${this.metaUpgrades.healthLevel}`;
+    this.ui.upgradeHealthButton.querySelector(".shop-item-text").textContent = `+10 HP навсегда в этой сессии · ${healthCost} монет`;
+    this.ui.upgradeHealthButton.disabled = this.wallet < healthCost;
+
+    this.ui.upgradeFireRateButton.querySelector(".shop-item-title").textContent = `Темп Огня Lv.${this.metaUpgrades.fireRateLevel}`;
+    this.ui.upgradeFireRateButton.querySelector(".shop-item-text").textContent = `Стрельба быстрее на 0.015 сек за уровень · ${fireRateCost} монет`;
+    this.ui.upgradeFireRateButton.disabled = this.wallet < fireRateCost;
+
+    this.ui.upgradeMagnetButton.querySelector(".shop-item-title").textContent = `Магнит Монет Lv.${this.metaUpgrades.magnetLevel}`;
+    this.ui.upgradeMagnetButton.querySelector(".shop-item-text").textContent = `Больше радиус и сила притяжения монет · ${magnetCost} монет`;
+    this.ui.upgradeMagnetButton.disabled = this.wallet < magnetCost;
+
+    this.ui.upgradeSpeedButton.querySelector(".shop-item-title").textContent = `Скорость Lv.${this.metaUpgrades.speedLevel}`;
+    this.ui.upgradeSpeedButton.querySelector(".shop-item-text").textContent = `Быстрее разгон и выше предел скорости · ${speedCost} монет`;
+    this.ui.upgradeSpeedButton.disabled = this.wallet < speedCost;
+  }
+
+  applyCoinMagnet(delta) {
+    const level = this.metaUpgrades.magnetLevel;
+    if (level <= 0) {
+      return;
+    }
+
+    const player = this.players[0];
+    if (!player?.active) {
+      return;
+    }
+
+    const radius = 92 + level * 42;
+    const force = 180 + level * 70;
+
+    this.coinPickups.forEach((pickup) => {
+      if (!pickup.active) {
+        return;
+      }
+
+      const dx = player.x - pickup.x;
+      const dy = player.y - pickup.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance <= 0.001 || distance > radius) {
+        return;
+      }
+
+      pickup.x += (dx / distance) * force * delta;
+      pickup.baseY += (dy / distance) * force * delta;
+    });
+  }
+
   spawnEnemy(difficulty) {
-    const spawnShooter = this.elapsed > 12 && Math.random() < Math.min(0.16 + difficulty * 0.05, 0.38);
-    const scale = spawnShooter ? 0.92 + Math.random() * 0.3 : 0.8 + Math.random() * 0.8;
-    const health = spawnShooter ? 3 : (scale > 1.2 ? 4 : 3);
-    const speed = spawnShooter
-      ? 138 + difficulty * 22 + Math.random() * 36
-      : 190 + difficulty * 36 + Math.random() * 80;
+    const stage = this.getCurrentStageConfig();
+    const activeEnemies = this.enemies.filter((enemy) => enemy.active);
+    const activeShooters = this.countEnemiesByKind("shooter");
+    const activeGrunts = this.countEnemiesByKind("grunt");
+    const activeBazookas = this.countEnemiesByKind("bazooka");
+
+    if (this.selectedMode === "campaign" && stage) {
+      if (activeEnemies.length >= stage.maxEnemies) {
+        return;
+      }
+    }
+
+    const weights = this.selectedMode === "campaign" && stage
+      ? { ...stage.enemyWeights }
+      : { swimmer: 0.46, shooter: 0.26, grunt: 0.18, bazooka: 0.1 };
+
+    if (stage) {
+      if (activeShooters >= stage.maxShooters) {
+        delete weights.shooter;
+      }
+      if (activeGrunts >= stage.maxGrunts) {
+        delete weights.grunt;
+      }
+      if (activeBazookas >= stage.maxBazookas) {
+        delete weights.bazooka;
+      }
+    } else {
+      if (activeShooters >= 2) {
+        delete weights.shooter;
+      }
+      if (activeGrunts >= 2) {
+        delete weights.grunt;
+      }
+      if (activeBazookas >= 1) {
+        delete weights.bazooka;
+      }
+    }
+
+    const entries = Object.entries(weights).filter(([, weight]) => weight > 0);
+    if (entries.length === 0) {
+      return;
+    }
+
+    const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0);
+    let roll = Math.random() * totalWeight;
+    let enemyKind = entries[0][0];
+    for (const [kind, weight] of entries) {
+      roll -= weight;
+      if (roll <= 0) {
+        enemyKind = kind;
+        break;
+      }
+    }
+
+    const isShooter = enemyKind === "shooter";
+    const isGrunt = enemyKind === "grunt";
+    const isBazooka = enemyKind === "bazooka";
+    const scale = isBazooka
+      ? 0.98 + Math.random() * 0.22
+      : isGrunt
+        ? 0.96 + Math.random() * 0.22
+        : isShooter
+          ? 0.92 + Math.random() * 0.3
+          : 0.8 + Math.random() * 0.8;
+    const health = isBazooka ? 4 : isGrunt || isShooter ? 3 : (scale > 1.2 ? 4 : 3);
+    const speed = isBazooka
+      ? 128 + difficulty * 16 + Math.random() * 24
+      : isGrunt
+        ? 156 + difficulty * 24 + Math.random() * 42
+        : isShooter
+          ? 138 + difficulty * 22 + Math.random() * 36
+          : 190 + difficulty * 36 + Math.random() * 80;
     this.enemies.push(
       new Enemy({
         x: this.canvas.width + 80,
@@ -347,12 +680,20 @@ class GameScene {
         speed,
         scale,
         health,
-        kind: spawnShooter ? "shooter" : "swimmer",
-        damage: spawnShooter ? 14 : 16 + Math.round(scale * 4),
-        fireCooldown: Math.max(1.15, 1.85 - difficulty * 0.14 + Math.random() * 0.25),
-        bulletSpeed: -(255 + difficulty * 16 + Math.random() * 24),
-        bulletDamage: 10 + Math.round(difficulty * 2),
-        scoreValue: spawnShooter ? 38 + Math.round(difficulty * 9) : 28 + Math.round(scale * 12),
+        kind: enemyKind,
+        damage: isBazooka ? 18 : isGrunt || isShooter ? 14 : 16 + Math.round(scale * 4),
+        fireCooldown: isBazooka
+          ? Math.max(1.7, 2.45 - difficulty * 0.12 + Math.random() * 0.25)
+          : isGrunt
+            ? Math.max(1.0, 1.45 - difficulty * 0.08 + Math.random() * 0.18)
+            : Math.max(1.15, 1.85 - difficulty * 0.14 + Math.random() * 0.25),
+        bulletSpeed: isBazooka
+          ? -(215 + difficulty * 10 + Math.random() * 18)
+          : isGrunt
+            ? -(330 + difficulty * 18 + Math.random() * 26)
+            : -(255 + difficulty * 16 + Math.random() * 24),
+        bulletDamage: isBazooka ? 13 + Math.round(difficulty * 2) : isGrunt ? 6 : 10 + Math.round(difficulty * 2),
+        scoreValue: isBazooka ? 58 + Math.round(difficulty * 12) : isGrunt ? 46 + Math.round(difficulty * 10) : isShooter ? 38 + Math.round(difficulty * 9) : 28 + Math.round(scale * 12),
       }),
     );
   }
@@ -398,11 +739,22 @@ class GameScene {
   }
 
   spawnObstacle(difficulty) {
+    const stage = this.getCurrentStageConfig();
+    if (this.selectedMode === "campaign" && stage) {
+      if (!stage.allowObstacles) {
+        return;
+      }
+      if (this.obstacles.filter((obstacle) => obstacle.active).length >= stage.maxObstacles) {
+        return;
+      }
+    }
+
     const patterns = [
       { kind: "boot", destructible: true, health: 2, scale: 0.9 + Math.random() * 0.6, scoreValue: 18 },
       { kind: "hook", destructible: false, health: 999, scale: 0.9 + Math.random() * 0.5, scoreValue: 0 },
     ];
-    if (!this.chestSpawnedThisRun && this.elapsed > 14 && Math.random() < (this.selectedMode === "campaign" ? 0.28 : 0.12)) {
+    const chestChance = this.selectedMode === "campaign" && stage ? stage.chestChance : 0.12;
+    if (!this.chestSpawnedThisRun && this.elapsed > 14 && Math.random() < chestChance) {
       patterns.push({ kind: "chest", destructible: true, health: 3, scale: 0.9 + Math.random() * 0.25, scoreValue: 26 });
     }
     const config = patterns[Math.floor(Math.random() * patterns.length)];
@@ -430,6 +782,17 @@ class GameScene {
         x: this.canvas.width + 70,
         y: 96 + Math.random() * (this.canvas.height - 192),
         speed: 105 + Math.random() * 35,
+        healAmount: 25,
+      }),
+    );
+  }
+
+  spawnHealingPickupAt({ x, y }) {
+    this.healingPickups.push(
+      new HealingPickup({
+        x,
+        y,
+        speed: 18,
         healAmount: 25,
       }),
     );
@@ -464,6 +827,68 @@ class GameScene {
     }
   }
 
+  handleEnemyDestroyed(enemy) {
+    this.score += enemy.scoreValue;
+    this.spawnCoinPickup({
+      x: enemy.x,
+      y: enemy.y,
+      amount: enemy.kind === "bazooka" ? 3 : enemy.kind === "shooter" ? 2 : 1,
+      spread: enemy.kind === "shooter" || enemy.kind === "bazooka",
+      spreadStrength: enemy.kind === "bazooka" ? 1.35 : enemy.kind === "shooter" ? 1.05 : 1,
+    });
+    this.effects.push(new ExplosionEffect({ x: enemy.x, y: enemy.y, scale: enemy.scale }));
+  }
+
+  handleObstacleDestroyed(obstacle) {
+    this.score += obstacle.scoreValue;
+    if (obstacle.kind === "chest") {
+      this.spawnCoinPickup({
+        x: obstacle.x,
+        y: obstacle.y,
+        amount: 5,
+        spread: true,
+        spreadStrength: 1.6,
+      });
+    }
+    this.effects.push(new ExplosionEffect({ x: obstacle.x, y: obstacle.y, scale: obstacle.scale * 0.75 }));
+  }
+
+  detonatePlayerExplosion(bullet, x, y) {
+    bullet.active = false;
+    const radius = bullet.explosionRadius;
+    this.effects.push(new ExplosionEffect({ x, y, scale: 1.1 }));
+
+    for (const enemy of this.enemies) {
+      if (!enemy.active || !circleOverlap({ x, y }, enemy, radius)) {
+        continue;
+      }
+      const destroyed = enemy.takeDamage(bullet.damage);
+      this.effects.push(new HitEffect({ x: enemy.x, y: enemy.y, scale: 0.9 + enemy.scale * 0.18, direction: 1, color: "#fb923c" }));
+      if (destroyed) {
+        this.handleEnemyDestroyed(enemy);
+      }
+    }
+
+    if (this.boss?.active && circleOverlap({ x, y }, this.boss, radius)) {
+      this.effects.push(new HitEffect({ x: this.boss.x - 40, y: this.boss.y, scale: 1.4, direction: 1, color: "#fb923c" }));
+      const destroyed = this.boss.takeDamage(bullet.damage);
+      if (destroyed) {
+        this.handleBossDefeat();
+      }
+    }
+
+    for (const obstacle of this.obstacles) {
+      if (!obstacle.active || !circleOverlap({ x, y }, obstacle, radius)) {
+        continue;
+      }
+      const destroyed = obstacle.takeDamage(bullet.damage);
+      this.effects.push(new HitEffect({ x: obstacle.x, y: obstacle.y, scale: 0.8 + obstacle.scale * 0.16, direction: 1, color: "#fb923c" }));
+      if (destroyed) {
+        this.handleObstacleDestroyed(obstacle);
+      }
+    }
+  }
+
   resolveBulletHits() {
     for (const bullet of this.bullets) {
       if (!bullet.active) {
@@ -476,6 +901,11 @@ class GameScene {
           continue;
         }
         if (circleRectOverlap(bullet, enemy)) {
+          if (bullet.explosionRadius > 0) {
+            this.detonatePlayerExplosion(bullet, bullet.x, bullet.y);
+            hit = true;
+            break;
+          }
           bullet.active = false;
           hit = true;
           this.effects.push(new HitEffect({
@@ -487,15 +917,7 @@ class GameScene {
           }));
           const destroyed = enemy.takeDamage(bullet.damage);
           if (destroyed) {
-            this.score += enemy.scoreValue;
-            this.spawnCoinPickup({
-              x: enemy.x,
-              y: enemy.y,
-              amount: enemy.kind === "shooter" ? 2 : 1,
-              spread: enemy.kind === "shooter",
-              spreadStrength: enemy.kind === "shooter" ? 1.05 : 1,
-            });
-            this.effects.push(new ExplosionEffect({ x: enemy.x, y: enemy.y, scale: enemy.scale }));
+            this.handleEnemyDestroyed(enemy);
           }
           break;
         }
@@ -506,6 +928,10 @@ class GameScene {
       }
 
       if (this.boss?.active && circleRectOverlap(bullet, this.boss)) {
+        if (bullet.explosionRadius > 0) {
+          this.detonatePlayerExplosion(bullet, bullet.x, bullet.y);
+          continue;
+        }
         bullet.active = false;
         this.effects.push(new HitEffect({
           x: bullet.x,
@@ -526,6 +952,10 @@ class GameScene {
           continue;
         }
         if (circleRectOverlap(bullet, obstacle)) {
+          if (bullet.explosionRadius > 0) {
+            this.detonatePlayerExplosion(bullet, bullet.x, bullet.y);
+            break;
+          }
           bullet.active = false;
           this.effects.push(new HitEffect({
             x: bullet.x,
@@ -536,17 +966,7 @@ class GameScene {
           }));
           const destroyed = obstacle.takeDamage(bullet.damage);
           if (destroyed) {
-            this.score += obstacle.scoreValue;
-            if (obstacle.kind === "chest") {
-              this.spawnCoinPickup({
-                x: obstacle.x,
-                y: obstacle.y,
-                amount: 5,
-                spread: true,
-                spreadStrength: 1.6,
-              });
-            }
-            this.effects.push(new ExplosionEffect({ x: obstacle.x, y: obstacle.y, scale: obstacle.scale * 0.75 }));
+            this.handleObstacleDestroyed(obstacle);
           }
           break;
         }
@@ -586,6 +1006,9 @@ class GameScene {
         }
 
         bullet.active = false;
+        if (bullet.explosionRadius > 0) {
+          this.effects.push(new ExplosionEffect({ x: bullet.x, y: bullet.y, scale: 0.95 }));
+        }
         player.takeDamage(bullet.damage);
       }
 
@@ -683,6 +1106,9 @@ class GameScene {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     this.renderBackground(ctx, canvas);
+    if (this.boss?.active) {
+      this.boss.drawTelegraph(ctx);
+    }
 
     this.players.forEach((player) => player.draw(ctx, this.assets));
     this.enemies.forEach((enemy) => enemy.draw(ctx, this.assets));
@@ -706,6 +1132,9 @@ class GameScene {
     if (this.boss?.active) {
       this.renderBossHud(ctx, canvas);
     }
+    if (this.stageBannerTimer > 0 && this.selectedMode === "campaign" && this.state === "running" && !this.boss) {
+      this.renderStageBanner(ctx, canvas);
+    }
   }
 
   renderBossHud(ctx, canvas) {
@@ -725,7 +1154,20 @@ class GameScene {
     ctx.fillStyle = "#f8fafc";
     ctx.font = "bold 16px Trebuchet MS";
     ctx.textAlign = "center";
-    ctx.fillText("Бронированная Треска", x + width * 0.5, y - 8);
+    ctx.fillText(this.boss.secondPhase ? "Бронированная Треска · Фаза 2" : "Бронированная Треска", x + width * 0.5, y - 8);
+    ctx.restore();
+  }
+
+  renderStageBanner(ctx, canvas) {
+    const progress = Math.min(1, this.stageBannerTimer / 2.2);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, progress * 1.4);
+    ctx.fillStyle = "rgba(7, 32, 57, 0.74)";
+    ctx.fillRect(canvas.width * 0.5 - 170, canvas.height - 88, 340, 42);
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 20px Trebuchet MS";
+    ctx.textAlign = "center";
+    ctx.fillText(this.stageBannerText, canvas.width * 0.5, canvas.height - 60);
     ctx.restore();
   }
 

@@ -7,6 +7,8 @@ const codShooterUrl = "./assets/sprites/runtime/enemy-cod-shooter.png";
 const coinUrl = "./assets/sprites/runtime/coin-pickup.png";
 const chestUrl = "./assets/sprites/runtime/chest-obstacle.png";
 const bossUrl = "./assets/sprites/runtime/boss-enemy.png";
+const codGruntUrl = "./assets/sprites/runtime/enemy-cod-grunt.png";
+const codBazookaUrl = "./assets/sprites/runtime/enemy-cod-bazooka.png";
 
 const spriteMap = {
   player: { sx: 115, sy: 175, sw: 405, sh: 230 },
@@ -27,7 +29,7 @@ function loadImage(src) {
 }
 
 async function loadAssets() {
-  const [atlasImage, healingImage, upgradeImage, engineerImage, medicImage, codShooterImage, coinImage, chestImage, bossImage] = await Promise.all([
+  const [atlasImage, healingImage, upgradeImage, engineerImage, medicImage, codShooterImage, coinImage, chestImage, bossImage, codGruntImage, codBazookaImage] = await Promise.all([
     loadImage(atlasUrl),
     loadImage(healingUrl),
     loadImage(upgradeUrl),
@@ -37,6 +39,8 @@ async function loadAssets() {
     loadImage(coinUrl),
     loadImage(chestUrl),
     loadImage(bossUrl),
+    loadImage(codGruntUrl),
+    loadImage(codBazookaUrl),
   ]);
   return {
     atlasImage,
@@ -48,6 +52,8 @@ async function loadAssets() {
     coinImage,
     chestImage,
     bossImage,
+    codGruntImage,
+    codBazookaImage,
     spriteMap,
   };
 }

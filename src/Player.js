@@ -14,6 +14,11 @@ class Player {
     this.controls = controls;
     this.classId = classId;
     this.classConfig = window.PlayerClasses.getConfig(classId);
+    this.metaUpgrades = {
+      healthLevel: 0,
+      fireRateLevel: 0,
+      speedLevel: 0,
+    };
     this.width = 84;
     this.height = 48;
     this.baseX = x;
@@ -25,6 +30,7 @@ class Player {
     this.maxFallSpeed = this.classConfig.maxFallSpeed;
     this.moveAcceleration = 880;
     this.maxHorizontalSpeed = 280;
+    this.maxVerticalSpeed = 320;
     this.horizontalDrag = 0.88;
     this.verticalDrag = 0.9;
     this.maxHealth = this.classConfig.maxHealth;
@@ -45,10 +51,22 @@ class Player {
     this.fallAcceleration = this.classConfig.fallAcceleration;
     this.maxRiseSpeed = this.classConfig.maxRiseSpeed;
     this.maxFallSpeed = this.classConfig.maxFallSpeed;
-    this.maxHealth = this.classConfig.maxHealth;
-    this.fireCooldown = this.classConfig.fireCooldown;
+    this.maxHealth = this.classConfig.maxHealth + this.metaUpgrades.healthLevel * 10;
+    this.fireCooldown = Math.max(0.12, this.classConfig.fireCooldown - this.metaUpgrades.fireRateLevel * 0.015);
+    this.moveAcceleration = 880 + this.metaUpgrades.speedLevel * 70;
+    this.maxHorizontalSpeed = 280 + this.metaUpgrades.speedLevel * 22;
+    this.maxVerticalSpeed = 320 + this.metaUpgrades.speedLevel * 22;
     this.invulnerabilityDuration = this.classConfig.invulnerabilityDuration;
     this.health = Math.min(this.health, this.maxHealth);
+  }
+
+  setMetaUpgrades(metaUpgrades) {
+    this.metaUpgrades = {
+      healthLevel: metaUpgrades.healthLevel || 0,
+      fireRateLevel: metaUpgrades.fireRateLevel || 0,
+      speedLevel: metaUpgrades.speedLevel || 0,
+    };
+    this.applyClass(this.classId);
   }
 
   reset(y) {
@@ -80,7 +98,7 @@ class Player {
     }
 
     this.velocityX = Math.max(-this.maxHorizontalSpeed, Math.min(this.maxHorizontalSpeed, this.velocityX));
-    this.velocityY = Math.max(this.maxRiseSpeed, Math.min(this.maxFallSpeed, this.velocityY));
+    this.velocityY = Math.max(-this.maxVerticalSpeed, Math.min(this.maxVerticalSpeed, this.velocityY));
 
     this.x += this.velocityX * delta;
     this.y += this.velocityY * delta;
@@ -122,6 +140,12 @@ class Player {
       radius: this.classConfig.bulletRadius,
       damage: this.classConfig.bulletDamage,
       ownerId: this.id,
+      explosionRadius: this.classConfig.explosionRadius || 0,
+      isRocket: this.classConfig.weaponType === "rocket",
+      tint: this.classConfig.weaponType === "rocket" ? (this.classConfig.rocketTint || "#fb923c") : null,
+      glow: this.classConfig.weaponType === "rocket" ? "rgba(251, 146, 60, 0.8)" : null,
+      spriteScale: this.classConfig.weaponType === "rocket" ? 1.14 : 1,
+      elongated: this.classConfig.weaponType === "rocket",
     }));
   }
 
