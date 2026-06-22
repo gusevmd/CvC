@@ -4,6 +4,9 @@ const upgradeUrl = "./assets/sprites/runtime/upgrade-pickup.png";
 const engineerUrl = "./assets/sprites/runtime/player-engineer.png";
 const medicUrl = "./assets/sprites/runtime/player-medic.png";
 const codShooterUrl = "./assets/sprites/runtime/enemy-cod-shooter.png";
+const coinUrl = "./assets/sprites/runtime/coin-pickup.png";
+const chestUrl = "./assets/sprites/runtime/chest-obstacle.png";
+const bossUrl = "./assets/sprites/runtime/boss-enemy.png";
 
 const spriteMap = {
   player: { sx: 115, sy: 175, sw: 405, sh: 230 },
@@ -24,13 +27,16 @@ function loadImage(src) {
 }
 
 async function loadAssets() {
-  const [atlasImage, healingImage, upgradeImage, engineerImage, medicImage, codShooterImage] = await Promise.all([
+  const [atlasImage, healingImage, upgradeImage, engineerImage, medicImage, codShooterImage, coinImage, chestImage, bossImage] = await Promise.all([
     loadImage(atlasUrl),
     loadImage(healingUrl),
     loadImage(upgradeUrl),
     loadImage(engineerUrl),
     loadImage(medicUrl),
     loadImage(codShooterUrl),
+    loadImage(coinUrl),
+    loadImage(chestUrl),
+    loadImage(bossUrl),
   ]);
   return {
     atlasImage,
@@ -39,6 +45,9 @@ async function loadAssets() {
     engineerImage,
     medicImage,
     codShooterImage,
+    coinImage,
+    chestImage,
+    bossImage,
     spriteMap,
   };
 }

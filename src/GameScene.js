@@ -37,6 +37,8 @@ class GameScene {
     this.obstacles = [];
     this.healingPickups = [];
     this.upgradePickups = [];
+    this.coinPickups = [];
+    this.boss = null;
     this.effects = [];
     this.bubbles = this.createBubbles(18);
     this.background = {
@@ -48,7 +50,9 @@ class GameScene {
 
     this.state = "start";
     this.selectedClassId = window.PlayerClasses.defaultId;
+    this.selectedMode = "campaign";
     this.score = 0;
+    this.coins = 0;
     this.survivalScoreAccumulator = 0;
     this.elapsed = 0;
     this.lastTime = 0;
@@ -59,9 +63,14 @@ class GameScene {
       healing: 7,
       upgrade: 14,
     };
+    this.campaignBossTime = 34;
+    this.bossLootTimer = 0;
+    this.chestSpawnedThisRun = false;
 
     this.input = {
       pointerHeld: false,
+      pointerX: canvas.width * 0.2,
+      pointerY: canvas.height * 0.5,
       keysHeld: new Set(),
     };
 
@@ -84,8 +93,18 @@ class GameScene {
       this.input.keysHeld.delete(event.code);
     });
 
+    const updatePointerPosition = (event) => {
+      const source = event.touches?.[0] || event.changedTouches?.[0] || event;
+      const rect = this.canvas.getBoundingClientRect();
+      const scaleX = this.canvas.width / rect.width;
+      const scaleY = this.canvas.height / rect.height;
+      this.input.pointerX = (source.clientX - rect.left) * scaleX;
+      this.input.pointerY = (source.clientY - rect.top) * scaleY;
+    };
+
     const holdPointer = (event) => {
       event.preventDefault();
+      updatePointerPosition(event);
       this.input.pointerHeld = true;
       if (this.state === "start") {
         this.startGame();
@@ -96,9 +115,18 @@ class GameScene {
       this.input.pointerHeld = false;
     };
 
+    const movePointer = (event) => {
+      if (!this.input.pointerHeld) {
+        return;
+      }
+      updatePointerPosition(event);
+    };
+
     this.canvas.addEventListener("mousedown", holdPointer);
+    this.canvas.addEventListener("mousemove", movePointer);
     window.addEventListener("mouseup", releasePointer);
     this.canvas.addEventListener("touchstart", holdPointer, { passive: false });
+    this.canvas.addEventListener("touchmove", movePointer, { passive: false });
     window.addEventListener("touchend", releasePointer, { passive: true });
     window.addEventListener("touchcancel", releasePointer, { passive: true });
   }
@@ -119,6 +147,10 @@ class GameScene {
     this.selectedClassId = window.PlayerClasses.getConfig(classId).id;
   }
 
+  setSelectedMode(mode) {
+    this.selectedMode = mode === "endless" ? "endless" : "campaign";
+  }
+
   resetWorld() {
     this.score = 0;
     this.survivalScoreAccumulator = 0;
@@ -129,7 +161,12 @@ class GameScene {
     this.obstacles = [];
     this.healingPickups = [];
     this.upgradePickups = [];
+    this.coinPickups = [];
+    this.boss = null;
     this.effects = [];
+    this.coins = 0;
+    this.bossLootTimer = 0;
+    this.chestSpawnedThisRun = false;
     this.spawnTimers.enemy = 1.4;
     this.spawnTimers.obstacle = 1.1;
     this.spawnTimers.healing = 7;
@@ -143,7 +180,17 @@ class GameScene {
   gameOver() {
     this.state = "gameover";
     this.ui.gameOverOverlay.hidden = false;
+    this.ui.gameOverTitle.textContent = "Карась выбыл";
     this.ui.gameOverScore.textContent = `Финальный счёт: ${Math.floor(this.score)}`;
+    this.ui.restartButton.textContent = "Повторить";
+  }
+
+  victory() {
+    this.state = "victory";
+    this.ui.gameOverOverlay.hidden = false;
+    this.ui.gameOverTitle.textContent = "Босс побеждён";
+    this.ui.gameOverScore.textContent = `Счёт: ${Math.floor(this.score)} · Монеты: ${this.coins}`;
+    this.ui.restartButton.textContent = "Играть снова";
   }
 
   loop(time) {
@@ -157,15 +204,18 @@ class GameScene {
   }
 
   update(delta) {
-    this.updateBubbles(delta);
-    this.updateBackground(delta);
+    const worldFrozen = Boolean(this.boss) || this.state === "bossclear";
+    if (!worldFrozen) {
+      this.updateBubbles(delta);
+      this.updateBackground(delta);
+    }
 
-    if (this.state !== "running") {
+    if (this.state !== "running" && this.state !== "bossclear") {
       return;
     }
 
     this.elapsed += delta;
-    this.survivalScoreAccumulator += delta * 8;
+    this.survivalScoreAccumulator += delta * (this.selectedMode === "endless" ? 8 : this.boss ? 0 : 8);
     if (this.survivalScoreAccumulator >= 1) {
       const points = Math.floor(this.survivalScoreAccumulator);
       this.score += points;
@@ -173,52 +223,64 @@ class GameScene {
     }
 
     const difficulty = 1 + Math.min(this.elapsed / 50, 1.8);
-    const riseActive = this.input.pointerHeld || this.input.keysHeld.has("Space");
+    const movement = this.getMovementInput();
 
     this.players.forEach((player) => {
-      player.isPressingRise = riseActive;
-      player.update(delta, this.canvas.height);
+      player.update(delta, this.canvas.width, this.canvas.height, movement);
       if (player.canShoot()) {
         this.bullets.push(...player.shoot());
       }
     });
 
-    this.spawnTimers.enemy -= delta;
-    this.spawnTimers.obstacle -= delta;
-    this.spawnTimers.healing -= delta;
-    this.spawnTimers.upgrade -= delta;
+    const shouldRunStage = this.state === "running" && !this.boss;
 
-    if (this.spawnTimers.enemy <= 0) {
-      this.spawnEnemy(difficulty);
-      this.spawnTimers.enemy = Math.max(0.45, 1.55 - difficulty * 0.25 + Math.random() * 0.35);
+    if (shouldRunStage) {
+      this.spawnTimers.enemy -= delta;
+      this.spawnTimers.obstacle -= delta;
+      this.spawnTimers.healing -= delta;
+      this.spawnTimers.upgrade -= delta;
+
+      if (this.selectedMode === "campaign" && this.elapsed >= this.campaignBossTime) {
+        this.startBossEncounter();
+      } else {
+        if (this.spawnTimers.enemy <= 0) {
+          this.spawnEnemy(difficulty);
+          this.spawnTimers.enemy = Math.max(0.45, 1.55 - difficulty * 0.25 + Math.random() * 0.35);
+        }
+
+        if (this.spawnTimers.obstacle <= 0) {
+          this.spawnObstacle(difficulty);
+          this.spawnTimers.obstacle = Math.max(0.35, 1.25 - difficulty * 0.18 + Math.random() * 0.4);
+        }
+
+        if (this.spawnTimers.healing <= 0) {
+          this.spawnHealingPickup();
+          this.spawnTimers.healing = 10 + Math.random() * 6;
+        }
+
+        if (this.spawnTimers.upgrade <= 0) {
+          this.spawnUpgradePickup();
+          this.spawnTimers.upgrade = 18 + Math.random() * 8;
+        }
+      }
     }
 
-    if (this.spawnTimers.obstacle <= 0) {
-      this.spawnObstacle(difficulty);
-      this.spawnTimers.obstacle = Math.max(0.35, 1.25 - difficulty * 0.18 + Math.random() * 0.4);
-    }
-
-    if (this.spawnTimers.healing <= 0) {
-      this.spawnHealingPickup();
-      this.spawnTimers.healing = 10 + Math.random() * 6;
-    }
-
-    if (this.spawnTimers.upgrade <= 0) {
-      this.spawnUpgradePickup();
-      this.spawnTimers.upgrade = 18 + Math.random() * 8;
-    }
-
-    this.bullets.forEach((bullet) => bullet.update(delta, this.canvas.width));
-    this.enemyBullets.forEach((bullet) => bullet.update(delta, this.canvas.width));
+    this.bullets.forEach((bullet) => bullet.update(delta, this.canvas.width, this.canvas.height));
+    this.enemyBullets.forEach((bullet) => bullet.update(delta, this.canvas.width, this.canvas.height));
     this.enemies.forEach((enemy) => {
       enemy.update(delta);
       if (enemy.canShoot()) {
         this.enemyBullets.push(enemy.shoot());
       }
     });
+    if (this.boss?.active) {
+      const bossShots = this.boss.update(delta, this.players[0]);
+      this.enemyBullets.push(...bossShots);
+    }
     this.obstacles.forEach((obstacle) => obstacle.update(delta));
     this.healingPickups.forEach((pickup) => pickup.update(delta));
     this.upgradePickups.forEach((pickup) => pickup.update(delta));
+    this.coinPickups.forEach((pickup) => pickup.update(delta));
     this.effects.forEach((effect) => effect.update(delta));
 
     this.resolveBulletHits();
@@ -226,9 +288,49 @@ class GameScene {
     this.cleanup();
     this.updateHud();
 
+    if (this.state === "bossclear") {
+      this.bossLootTimer -= delta;
+      if (this.bossLootTimer <= 0 || this.coinPickups.length === 0) {
+        this.victory();
+        return;
+      }
+    }
+
     if (this.players.every((player) => !player.active)) {
       this.gameOver();
     }
+  }
+
+  startBossEncounter() {
+    this.enemies = [];
+    this.obstacles = [];
+    this.healingPickups = [];
+    this.upgradePickups = [];
+    this.coinPickups = [];
+    this.enemyBullets = [];
+    this.bullets = [];
+    this.boss = new BossEnemy({
+      x: this.canvas.width + 260,
+      y: this.canvas.height / 2,
+      worldWidth: this.canvas.width,
+      worldHeight: this.canvas.height,
+    });
+  }
+
+  handleBossDefeat() {
+    this.score += 420;
+    this.effects.push(new ExplosionEffect({ x: this.boss.x, y: this.boss.y, scale: 2.6 }));
+    this.spawnCoinPickup({
+      x: this.boss.x,
+      y: this.boss.y,
+      amount: 24,
+      spread: true,
+      spreadStrength: 2.35,
+    });
+    this.boss = null;
+    this.enemyBullets = [];
+    this.state = "bossclear";
+    this.bossLootTimer = 6;
   }
 
   spawnEnemy(difficulty) {
@@ -255,22 +357,68 @@ class GameScene {
     );
   }
 
+  getMovementInput() {
+    let x = 0;
+    let y = 0;
+
+    if (this.input.keysHeld.has("KeyA") || this.input.keysHeld.has("ArrowLeft")) {
+      x -= 1;
+    }
+    if (this.input.keysHeld.has("KeyD") || this.input.keysHeld.has("ArrowRight")) {
+      x += 1;
+    }
+    if (this.input.keysHeld.has("KeyW") || this.input.keysHeld.has("ArrowUp")) {
+      y -= 1;
+    }
+    if (this.input.keysHeld.has("KeyS") || this.input.keysHeld.has("ArrowDown")) {
+      y += 1;
+    }
+
+    if (x !== 0 || y !== 0) {
+      return { x, y };
+    }
+
+    if (!this.input.pointerHeld) {
+      return { x: 0, y: 0 };
+    }
+
+    const player = this.players[0];
+    if (!player) {
+      return { x: 0, y: 0 };
+    }
+
+    const dx = this.input.pointerX - player.x;
+    const dy = this.input.pointerY - player.y;
+    const deadZone = 18;
+
+    return {
+      x: Math.abs(dx) > deadZone ? Math.sign(dx) : 0,
+      y: Math.abs(dy) > deadZone ? Math.sign(dy) : 0,
+    };
+  }
+
   spawnObstacle(difficulty) {
     const patterns = [
       { kind: "boot", destructible: true, health: 2, scale: 0.9 + Math.random() * 0.6, scoreValue: 18 },
       { kind: "hook", destructible: false, health: 999, scale: 0.9 + Math.random() * 0.5, scoreValue: 0 },
     ];
+    if (!this.chestSpawnedThisRun && this.elapsed > 14 && Math.random() < (this.selectedMode === "campaign" ? 0.28 : 0.12)) {
+      patterns.push({ kind: "chest", destructible: true, health: 3, scale: 0.9 + Math.random() * 0.25, scoreValue: 26 });
+    }
     const config = patterns[Math.floor(Math.random() * patterns.length)];
+    if (config.kind === "chest") {
+      this.chestSpawnedThisRun = true;
+    }
     this.obstacles.push(
       new Obstacle({
         x: this.canvas.width + 60,
         y: 84 + Math.random() * (this.canvas.height - 168),
-        speed: 170 + difficulty * 28 + Math.random() * 70,
+        speed: config.kind === "chest" ? 150 + difficulty * 20 + Math.random() * 36 : 170 + difficulty * 28 + Math.random() * 70,
         kind: config.kind,
         destructible: config.destructible,
         scale: config.scale,
         health: config.health,
-        damage: config.destructible ? 10 : 18,
+        damage: config.kind === "chest" ? 12 : config.destructible ? 10 : 18,
         scoreValue: config.scoreValue,
       }),
     );
@@ -297,6 +445,25 @@ class GameScene {
     );
   }
 
+  spawnCoinPickup({ x, y, amount, spread = false, spreadStrength = 1 }) {
+    const coinCount = spread ? amount : 1;
+
+    for (let i = 0; i < coinCount; i += 1) {
+      const angle = -0.95 + (coinCount === 1 ? 0 : (i / Math.max(1, coinCount - 1)) * 1.9);
+      const burst = spread ? (48 + Math.random() * 42) * spreadStrength : 0;
+      this.coinPickups.push(
+        new CoinPickup({
+          x: x + (spread ? (-10 + Math.random() * 20) * spreadStrength : 0),
+          y: y + (spread ? (-8 + Math.random() * 16) * spreadStrength : 0),
+          amount: spread ? 1 : amount,
+          speed: 96 + Math.random() * 24,
+          velocityX: Math.cos(angle) * burst,
+          velocityY: Math.sin(angle) * burst * 0.65,
+        }),
+      );
+    }
+  }
+
   resolveBulletHits() {
     for (const bullet of this.bullets) {
       if (!bullet.active) {
@@ -311,9 +478,23 @@ class GameScene {
         if (circleRectOverlap(bullet, enemy)) {
           bullet.active = false;
           hit = true;
+          this.effects.push(new HitEffect({
+            x: bullet.x,
+            y: bullet.y,
+            scale: 0.8 + enemy.scale * 0.18,
+            direction: 1,
+            color: "#fde047",
+          }));
           const destroyed = enemy.takeDamage(bullet.damage);
           if (destroyed) {
             this.score += enemy.scoreValue;
+            this.spawnCoinPickup({
+              x: enemy.x,
+              y: enemy.y,
+              amount: enemy.kind === "shooter" ? 2 : 1,
+              spread: enemy.kind === "shooter",
+              spreadStrength: enemy.kind === "shooter" ? 1.05 : 1,
+            });
             this.effects.push(new ExplosionEffect({ x: enemy.x, y: enemy.y, scale: enemy.scale }));
           }
           break;
@@ -324,15 +505,47 @@ class GameScene {
         continue;
       }
 
+      if (this.boss?.active && circleRectOverlap(bullet, this.boss)) {
+        bullet.active = false;
+        this.effects.push(new HitEffect({
+          x: bullet.x,
+          y: bullet.y,
+          scale: 1.35,
+          direction: 1,
+          color: "#fb7185",
+        }));
+        const destroyed = this.boss.takeDamage(bullet.damage);
+        if (destroyed) {
+          this.handleBossDefeat();
+        }
+        continue;
+      }
+
       for (const obstacle of this.obstacles) {
         if (!obstacle.active) {
           continue;
         }
         if (circleRectOverlap(bullet, obstacle)) {
           bullet.active = false;
+          this.effects.push(new HitEffect({
+            x: bullet.x,
+            y: bullet.y,
+            scale: 0.72 + obstacle.scale * 0.16,
+            direction: 1,
+            color: obstacle.destructible ? "#fbbf24" : "#cbd5e1",
+          }));
           const destroyed = obstacle.takeDamage(bullet.damage);
           if (destroyed) {
             this.score += obstacle.scoreValue;
+            if (obstacle.kind === "chest") {
+              this.spawnCoinPickup({
+                x: obstacle.x,
+                y: obstacle.y,
+                amount: 5,
+                spread: true,
+                spreadStrength: 1.6,
+              });
+            }
             this.effects.push(new ExplosionEffect({ x: obstacle.x, y: obstacle.y, scale: obstacle.scale * 0.75 }));
           }
           break;
@@ -353,6 +566,10 @@ class GameScene {
           player.takeDamage(enemy.damage);
           this.effects.push(new ExplosionEffect({ x: enemy.x, y: enemy.y, scale: enemy.scale }));
         }
+      }
+
+      if (this.boss?.active && rectOverlap(player, this.boss)) {
+        player.takeDamage(28);
       }
 
       for (const obstacle of this.obstacles) {
@@ -394,6 +611,15 @@ class GameScene {
           pickup.active = false;
         }
       }
+
+      for (const pickup of this.coinPickups) {
+        if (!pickup.active || !rectOverlap(player, pickup)) {
+          continue;
+        }
+
+        pickup.active = false;
+        this.coins += pickup.amount;
+      }
     }
   }
 
@@ -404,6 +630,7 @@ class GameScene {
     this.obstacles = this.obstacles.filter((obstacle) => obstacle.active);
     this.healingPickups = this.healingPickups.filter((pickup) => pickup.active);
     this.upgradePickups = this.upgradePickups.filter((pickup) => pickup.active);
+    this.coinPickups = this.coinPickups.filter((pickup) => pickup.active);
     this.effects = this.effects.filter((effect) => effect.active);
   }
 
@@ -446,6 +673,7 @@ class GameScene {
     const maxHealth = leadPlayer?.maxHealth ?? 100;
     const ratio = health / maxHealth;
     this.ui.scoreValue.textContent = Math.floor(this.score);
+    this.ui.coinValue.textContent = this.coins;
     this.ui.healthFill.style.transform = `scaleX(${ratio})`;
     this.ui.healthLabel.textContent = `${Math.ceil(health)} / ${maxHealth}`;
   }
@@ -459,8 +687,12 @@ class GameScene {
     this.players.forEach((player) => player.draw(ctx, this.assets));
     this.enemies.forEach((enemy) => enemy.draw(ctx, this.assets));
     this.obstacles.forEach((obstacle) => obstacle.draw(ctx, this.assets));
+    if (this.boss?.active) {
+      this.boss.draw(ctx, this.assets);
+    }
     this.healingPickups.forEach((pickup) => pickup.draw(ctx, this.assets));
     this.upgradePickups.forEach((pickup) => pickup.draw(ctx, this.assets));
+    this.coinPickups.forEach((pickup) => pickup.draw(ctx, this.assets));
     this.bullets.forEach((bullet) => bullet.draw(ctx, this.assets));
     this.enemyBullets.forEach((bullet) => bullet.draw(ctx, this.assets));
     this.effects.forEach((effect) => effect.draw(ctx, this.assets));
@@ -470,6 +702,31 @@ class GameScene {
       ctx.font = "bold 20px Trebuchet MS";
       ctx.fillText("Карась уже заряжает пушку...", 26, canvas.height - 26);
     }
+
+    if (this.boss?.active) {
+      this.renderBossHud(ctx, canvas);
+    }
+  }
+
+  renderBossHud(ctx, canvas) {
+    const width = 300;
+    const height = 16;
+    const x = canvas.width * 0.5 - width * 0.5;
+    const y = 104;
+    const ratio = Math.max(0, this.boss.health / this.boss.maxHealth);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(7, 32, 57, 0.82)";
+    ctx.fillRect(x - 10, y - 28, width + 20, height + 38);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(x, y, width * ratio, height);
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 16px Trebuchet MS";
+    ctx.textAlign = "center";
+    ctx.fillText("Бронированная Треска", x + width * 0.5, y - 8);
+    ctx.restore();
   }
 
   renderBackground(ctx, canvas) {

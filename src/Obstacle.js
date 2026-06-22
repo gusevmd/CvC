@@ -20,8 +20,8 @@ class Obstacle {
     this.health = health;
     this.damage = damage;
     this.scoreValue = scoreValue;
-    this.width = (kind === "hook" ? 32 : 66) * scale;
-    this.height = (kind === "hook" ? 62 : 44) * scale;
+    this.width = (kind === "hook" ? 32 : kind === "chest" ? 54 : 66) * scale;
+    this.height = (kind === "hook" ? 62 : kind === "chest" ? 48 : 44) * scale;
     this.active = true;
   }
 
@@ -47,7 +47,15 @@ class Obstacle {
   draw(ctx, assets) {
     ctx.save();
     ctx.translate(this.x, this.y);
-    if (assets?.atlasImage) {
+    if (this.kind === "chest" && assets?.chestImage) {
+      ctx.drawImage(
+        assets.chestImage,
+        -this.width * 0.72,
+        -this.height * 0.76,
+        this.width * 1.44,
+        this.height * 1.52,
+      );
+    } else if (assets?.atlasImage) {
       const sprite = assets.spriteMap[this.kind];
       ctx.drawImage(
         assets.atlasImage,

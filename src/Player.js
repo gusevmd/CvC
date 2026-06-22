@@ -16,11 +16,17 @@ class Player {
     this.classConfig = window.PlayerClasses.getConfig(classId);
     this.width = 84;
     this.height = 48;
+    this.baseX = x;
     this.velocityY = 0;
+    this.velocityX = 0;
     this.riseAcceleration = this.classConfig.riseAcceleration;
     this.fallAcceleration = this.classConfig.fallAcceleration;
     this.maxRiseSpeed = this.classConfig.maxRiseSpeed;
     this.maxFallSpeed = this.classConfig.maxFallSpeed;
+    this.moveAcceleration = 880;
+    this.maxHorizontalSpeed = 280;
+    this.horizontalDrag = 0.88;
+    this.verticalDrag = 0.9;
     this.maxHealth = this.classConfig.maxHealth;
     this.health = this.maxHealth;
     this.fireCooldown = this.classConfig.fireCooldown;
@@ -46,7 +52,9 @@ class Player {
   }
 
   reset(y) {
+    this.x = this.baseX;
     this.y = y;
+    this.velocityX = 0;
     this.velocityY = 0;
     this.applyClass(this.classId);
     this.health = this.maxHealth;
@@ -57,20 +65,38 @@ class Player {
     this.active = true;
   }
 
-  update(delta, worldHeight) {
-    const acceleration = this.isPressingRise ? this.riseAcceleration : this.fallAcceleration;
-    this.velocityY += acceleration * delta;
+  update(delta, worldWidth, worldHeight, inputVector = { x: 0, y: 0 }) {
+    const inputX = Math.max(-1, Math.min(1, inputVector.x || 0));
+    const inputY = Math.max(-1, Math.min(1, inputVector.y || 0));
 
-    if (this.isPressingRise) {
-      this.velocityY = Math.max(this.velocityY, this.maxRiseSpeed);
-    } else {
-      this.velocityY = Math.min(this.velocityY, this.maxFallSpeed);
+    this.velocityX += inputX * this.moveAcceleration * delta;
+    this.velocityY += inputY * this.moveAcceleration * delta;
+
+    if (inputX === 0) {
+      this.velocityX *= Math.pow(this.horizontalDrag, delta * 60);
+    }
+    if (inputY === 0) {
+      this.velocityY *= Math.pow(this.verticalDrag, delta * 60);
     }
 
-    this.y += this.velocityY * delta;
-    this.y = Math.max(this.height * 0.6, Math.min(worldHeight - this.height * 0.6, this.y));
+    this.velocityX = Math.max(-this.maxHorizontalSpeed, Math.min(this.maxHorizontalSpeed, this.velocityX));
+    this.velocityY = Math.max(this.maxRiseSpeed, Math.min(this.maxFallSpeed, this.velocityY));
 
-    if ((this.y <= this.height * 0.6 && this.velocityY < 0) || (this.y >= worldHeight - this.height * 0.6 && this.velocityY > 0)) {
+    this.x += this.velocityX * delta;
+    this.y += this.velocityY * delta;
+
+    const minX = this.width * 0.8;
+    const maxX = worldWidth * 0.42;
+    const minY = this.height * 0.6;
+    const maxY = worldHeight - this.height * 0.6;
+
+    this.x = Math.max(minX, Math.min(maxX, this.x));
+    this.y = Math.max(minY, Math.min(maxY, this.y));
+
+    if ((this.x <= minX && this.velocityX < 0) || (this.x >= maxX && this.velocityX > 0)) {
+      this.velocityX = 0;
+    }
+    if ((this.y <= minY && this.velocityY < 0) || (this.y >= maxY && this.velocityY > 0)) {
       this.velocityY = 0;
     }
 
