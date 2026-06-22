@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Караси против Трески</title>
+    <style>
+      :root {
+        color-scheme: only light;
+        --bg-top: #7dd3fc;
+        --bg-bottom: #0f5f9e;
+        --panel: rgba(7, 32, 57, 0.82);
+        --text: #f8fafc;
+        --accent: #f97316;
+        --danger: #ef4444;
+        --ok: #22c55e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.35), transparent 30%),
+          linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        font-family: "Trebuchet MS", "Verdana", sans-serif;
+        color: var(--text);
+      }
+
+      .shell {
+        width: min(100vw, 980px);
+        padding: 16px;
+      }
+
+      .game-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(4, 15, 26, 0.34);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(7, 32, 57, 0.16));
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+
+      .hud {
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        pointer-events: none;
+      }
+
+      .hud-panel {
+        min-width: 180px;
+        padding: 10px 14px;
+        border-radius: 16px;
+        background: var(--panel);
+        backdrop-filter: blur(10px);
+      }
+
+      .hud-title {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.75;
+      }
+
+      .hud-value {
+        margin-top: 4px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      .health-bar {
+        position: relative;
+        width: 190px;
+        height: 14px;
+        margin-top: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        overflow: hidden;
+      }
+
+      .health-fill {
+        height: 100%;
+        width: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--danger), #facc15, var(--ok));
+        transform-origin: left center;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(3, 15, 29, 0.52);
+      }
+
+      .overlay[hidden] {
+        display: none;
+      }
+
+      .card {
+        width: min(100%, 520px);
+        padding: 28px;
+        border-radius: 24px;
+        background: rgba(6, 24, 41, 0.88);
+        text-align: center;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+      }
+
+      h1, h2, p {
+        margin: 0;
+      }
+
+      h1, h2 {
+        font-size: clamp(32px, 4vw, 48px);
+      }
+
+      .card p {
+        margin-top: 14px;
+        line-height: 1.45;
+        opacity: 0.9;
+      }
+
+      .accent {
+        color: #ffd166;
+      }
+
+      button {
+        margin-top: 20px;
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 24px;
+        font: inherit;
+        font-weight: 700;
+        color: white;
+        background: linear-gradient(135deg, var(--accent), #ea580c);
+        cursor: pointer;
+      }
+
+      .hint {
+        margin-top: 16px;
+        font-size: 14px;
+        opacity: 0.72;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="game-wrap">
+        <canvas id="game" width="960" height="540"></canvas>
+
+        <div class="hud">
+          <div class="hud-panel">
+            <div class="hud-title">Счёт</div>
+            <div class="hud-value" id="scoreValue">0</div>
+          </div>
+          <div class="hud-panel">
+            <div class="hud-title">Здоровье карася</div>
+            <div class="health-bar">
+              <div class="health-fill" id="healthFill"></div>
+            </div>
+            <div class="hint" id="healthLabel">100 / 100</div>
+          </div>
+        </div>
+
+        <div class="overlay" id="startOverlay">
+          <div class="card">
+            <h1>Караси <span class="accent">против Трески</span></h1>
+            <p>Удерживай <strong>Space</strong>, ЛКМ или палец на экране, чтобы всплывать. Карась стреляет автоматически и должен пережить всё более злую подводную свалку.</p>
+            <button id="startButton" type="button">Старт</button>
+            <p class="hint">MVP-прототип на HTML5 Canvas, без backend и сборки.</p>
+          </div>
+        </div>
+
+        <div class="overlay" id="gameOverOverlay" hidden>
+          <div class="card">
+            <h2>Карась выбыл</h2>
+            <p id="gameOverScore">Финальный счёт: 0</p>
+            <button id="restartButton" type="button">Повторить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./src/Assets.js"></script>
+    <script src="./src/Bullet.js"></script>
+    <script src="./src/Enemy.js"></script>
+    <script src="./src/Obstacle.js"></script>
+    <script src="./src/Player.js"></script>
+    <script src="./src/Effects.js"></script>
+    <script src="./src/HealingPickup.js"></script>
+    <script src="./src/GameScene.js"></script>
+    <script src="./src/main.js"></script>
+  </body>
+</html>
