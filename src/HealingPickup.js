@@ -5,8 +5,8 @@ class HealingPickup {
     this.y = y;
     this.speed = speed;
     this.healAmount = healAmount;
-    this.width = 62;
-    this.height = 48;
+    this.width = 54;
+    this.height = 42;
     this.phase = Math.random() * Math.PI * 2;
     this.active = true;
   }

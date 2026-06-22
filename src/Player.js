@@ -12,8 +12,8 @@ class Player {
     this.y = y;
     this.canvasHeight = canvasHeight;
     this.controls = controls;
-    this.width = 96;
-    this.height = 54;
+    this.width = 84;
+    this.height = 48;
     this.velocityY = 0;
     this.riseAcceleration = -980;
     this.fallAcceleration = 720;
@@ -23,6 +23,7 @@ class Player {
     this.health = maxHealth;
     this.fireCooldown = 0.22;
     this.fireTimer = 0;
+    this.hasDoubleShot = false;
     this.invulnerabilityDuration = 0.7;
     this.invulnerabilityTimer = 0;
     this.isPressingRise = false;
@@ -34,6 +35,7 @@ class Player {
     this.velocityY = 0;
     this.health = this.maxHealth;
     this.fireTimer = 0;
+    this.hasDoubleShot = false;
     this.invulnerabilityTimer = 0;
     this.isPressingRise = false;
     this.active = true;
@@ -66,14 +68,17 @@ class Player {
 
   shoot() {
     this.fireTimer = this.fireCooldown;
-    return new Bullet({
-      x: this.x + this.width * 0.45,
-      y: this.y + 2,
+    const bulletX = this.x + this.width * 0.45;
+    const bulletOffsets = this.hasDoubleShot ? [-11, 11] : [2];
+
+    return bulletOffsets.map((offsetY) => new Bullet({
+      x: bulletX,
+      y: this.y + offsetY,
       velocityX: 460,
       radius: 5,
       damage: 1,
       ownerId: this.id,
-    });
+    }));
   }
 
   takeDamage(amount) {
@@ -97,6 +102,15 @@ class Player {
     const previousHealth = this.health;
     this.health = Math.min(this.maxHealth, this.health + amount);
     return this.health - previousHealth;
+  }
+
+  enableDoubleShot() {
+    if (!this.active || this.hasDoubleShot) {
+      return false;
+    }
+
+    this.hasDoubleShot = true;
+    return true;
   }
 
   draw(ctx, assets) {

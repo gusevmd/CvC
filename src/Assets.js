@@ -1,5 +1,6 @@
 const atlasUrl = "./assets/sprites/game-sprites.png";
 const healingUrl = "./assets/sprites/runtime/bandage-pickup.png";
+const upgradeUrl = "./assets/sprites/runtime/upgrade-pickup.png";
 
 const spriteMap = {
   player: { sx: 115, sy: 175, sw: 405, sh: 230 },
@@ -20,13 +21,15 @@ function loadImage(src) {
 }
 
 async function loadAssets() {
-  const [atlasImage, healingImage] = await Promise.all([
+  const [atlasImage, healingImage, upgradeImage] = await Promise.all([
     loadImage(atlasUrl),
     loadImage(healingUrl),
+    loadImage(upgradeUrl),
   ]);
   return {
     atlasImage,
     healingImage,
+    upgradeImage,
     spriteMap,
   };
 }

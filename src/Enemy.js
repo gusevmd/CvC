@@ -9,8 +9,8 @@ class Enemy {
     this.maxHealth = health;
     this.damage = damage;
     this.scoreValue = scoreValue;
-    this.width = 84 * scale;
-    this.height = 42 * scale;
+    this.width = 72 * scale;
+    this.height = 36 * scale;
     this.active = true;
   }
 

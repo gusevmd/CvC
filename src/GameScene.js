@@ -23,7 +23,7 @@ class GameScene {
     this.players = [
       new Player({
         id: "player-1",
-        x: 132,
+        x: 156,
         y: canvas.height / 2,
         canvasHeight: canvas.height,
         controls: { riseKey: "Space", pointer: true, touch: true },
@@ -34,6 +34,7 @@ class GameScene {
     this.enemies = [];
     this.obstacles = [];
     this.healingPickups = [];
+    this.upgradePickups = [];
     this.effects = [];
     this.bubbles = this.createBubbles(18);
     this.background = {
@@ -53,6 +54,7 @@ class GameScene {
       enemy: 1.4,
       obstacle: 1.1,
       healing: 7,
+      upgrade: 14,
     };
 
     this.input = {
@@ -117,12 +119,14 @@ class GameScene {
     this.enemies = [];
     this.obstacles = [];
     this.healingPickups = [];
+    this.upgradePickups = [];
     this.effects = [];
     this.spawnTimers.enemy = 1.4;
     this.spawnTimers.obstacle = 1.1;
     this.spawnTimers.healing = 7;
+    this.spawnTimers.upgrade = 14;
     this.players.forEach((player, index) => {
-      player.reset(this.canvas.height * (0.42 + index * 0.14));
+      player.reset(this.canvas.height * (0.36 + index * 0.16));
     });
     this.updateHud();
   }
@@ -166,13 +170,14 @@ class GameScene {
       player.isPressingRise = riseActive;
       player.update(delta, this.canvas.height);
       if (player.canShoot()) {
-        this.bullets.push(player.shoot());
+        this.bullets.push(...player.shoot());
       }
     });
 
     this.spawnTimers.enemy -= delta;
     this.spawnTimers.obstacle -= delta;
     this.spawnTimers.healing -= delta;
+    this.spawnTimers.upgrade -= delta;
 
     if (this.spawnTimers.enemy <= 0) {
       this.spawnEnemy(difficulty);
@@ -189,10 +194,16 @@ class GameScene {
       this.spawnTimers.healing = 10 + Math.random() * 6;
     }
 
+    if (this.spawnTimers.upgrade <= 0) {
+      this.spawnUpgradePickup();
+      this.spawnTimers.upgrade = 18 + Math.random() * 8;
+    }
+
     this.bullets.forEach((bullet) => bullet.update(delta, this.canvas.width));
     this.enemies.forEach((enemy) => enemy.update(delta));
     this.obstacles.forEach((obstacle) => obstacle.update(delta));
     this.healingPickups.forEach((pickup) => pickup.update(delta));
+    this.upgradePickups.forEach((pickup) => pickup.update(delta));
     this.effects.forEach((effect) => effect.update(delta));
 
     this.resolveBulletHits();
@@ -212,7 +223,7 @@ class GameScene {
     this.enemies.push(
       new Enemy({
         x: this.canvas.width + 80,
-        y: 64 + Math.random() * (this.canvas.height - 128),
+        y: 88 + Math.random() * (this.canvas.height - 176),
         speed,
         scale,
         health,
@@ -231,7 +242,7 @@ class GameScene {
     this.obstacles.push(
       new Obstacle({
         x: this.canvas.width + 60,
-        y: 56 + Math.random() * (this.canvas.height - 112),
+        y: 84 + Math.random() * (this.canvas.height - 168),
         speed: 170 + difficulty * 28 + Math.random() * 70,
         kind: config.kind,
         destructible: config.destructible,
@@ -247,9 +258,19 @@ class GameScene {
     this.healingPickups.push(
       new HealingPickup({
         x: this.canvas.width + 70,
-        y: 72 + Math.random() * (this.canvas.height - 144),
+        y: 96 + Math.random() * (this.canvas.height - 192),
         speed: 105 + Math.random() * 35,
         healAmount: 25,
+      }),
+    );
+  }
+
+  spawnUpgradePickup() {
+    this.upgradePickups.push(
+      new UpgradePickup({
+        x: this.canvas.width + 74,
+        y: 102 + Math.random() * (this.canvas.height - 204),
+        speed: 110 + Math.random() * 30,
       }),
     );
   }
@@ -331,6 +352,17 @@ class GameScene {
           this.effects.push(new HealingEffect({ x: player.x, y: player.y - 38, amount: healedAmount }));
         }
       }
+
+      for (const pickup of this.upgradePickups) {
+        if (!pickup.active || !rectOverlap(player, pickup)) {
+          continue;
+        }
+
+        const upgraded = player.enableDoubleShot();
+        if (upgraded) {
+          pickup.active = false;
+        }
+      }
     }
   }
 
@@ -339,6 +371,7 @@ class GameScene {
     this.enemies = this.enemies.filter((enemy) => enemy.active);
     this.obstacles = this.obstacles.filter((obstacle) => obstacle.active);
     this.healingPickups = this.healingPickups.filter((pickup) => pickup.active);
+    this.upgradePickups = this.upgradePickups.filter((pickup) => pickup.active);
     this.effects = this.effects.filter((effect) => effect.active);
   }
 
@@ -395,6 +428,7 @@ class GameScene {
     this.enemies.forEach((enemy) => enemy.draw(ctx, this.assets));
     this.obstacles.forEach((obstacle) => obstacle.draw(ctx, this.assets));
     this.healingPickups.forEach((pickup) => pickup.draw(ctx, this.assets));
+    this.upgradePickups.forEach((pickup) => pickup.draw(ctx, this.assets));
     this.bullets.forEach((bullet) => bullet.draw(ctx, this.assets));
     this.effects.forEach((effect) => effect.draw(ctx, this.assets));
 

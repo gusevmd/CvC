@@ -20,8 +20,8 @@ class Obstacle {
     this.health = health;
     this.damage = damage;
     this.scoreValue = scoreValue;
-    this.width = (kind === "hook" ? 38 : 76) * scale;
-    this.height = (kind === "hook" ? 72 : 50) * scale;
+    this.width = (kind === "hook" ? 32 : 66) * scale;
+    this.height = (kind === "hook" ? 62 : 44) * scale;
     this.active = true;
   }
 

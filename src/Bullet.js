@@ -1,5 +1,5 @@
 class Bullet {
-  constructor({ x, y, velocityX, radius = 5, damage = 1, ownerId }) {
+  constructor({ x, y, velocityX, radius = 4, damage = 1, ownerId }) {
     this.x = x;
     this.y = y;
     this.velocityX = velocityX;
@@ -20,8 +20,8 @@ class Bullet {
     ctx.save();
     if (assets?.atlasImage) {
       const sprite = assets.spriteMap.bullet;
-      const width = 28;
-      const height = 10;
+      const width = 24;
+      const height = 8;
       ctx.drawImage(
         assets.atlasImage,
         sprite.sx,
