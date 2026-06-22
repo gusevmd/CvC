@@ -11,7 +11,7 @@ class Bullet {
 
   update(delta, width) {
     this.x += this.velocityX * delta;
-    if (this.x - this.radius > width + 32) {
+    if (this.x - this.radius > width + 32 || this.x + this.radius < -32) {
       this.active = false;
     }
   }

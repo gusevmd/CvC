@@ -140,6 +140,50 @@
         opacity: 0.9;
       }
 
+      .class-picker {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 20px;
+        text-align: left;
+      }
+
+      .class-option {
+        border: 2px solid rgba(255, 255, 255, 0.14);
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.06);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+      }
+
+      .class-option:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 209, 102, 0.42);
+      }
+
+      .class-option.selected {
+        border-color: rgba(255, 209, 102, 0.92);
+        background: rgba(249, 115, 22, 0.16);
+      }
+
+      .class-option-title {
+        display: block;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .class-option-text {
+        display: block;
+        margin-top: 6px;
+        font-size: 14px;
+        line-height: 1.4;
+        opacity: 0.82;
+      }
+
       .accent {
         color: #ffd166;
       }
@@ -185,7 +229,21 @@
         <div class="overlay" id="startOverlay">
           <div class="card">
             <h1>Караси <span class="accent">против Трески</span></h1>
-            <p>Удерживай <strong>Space</strong>, ЛКМ или палец на экране, чтобы всплывать. Карась стреляет автоматически и должен пережить всё более злую подводную свалку.</p>
+            <p>Выбери класс карася. Удерживай <strong>Space</strong>, ЛКМ или палец на экране, чтобы всплывать. Карась стреляет автоматически и должен пережить всё более злую подводную свалку.</p>
+            <div class="class-picker" id="classPicker">
+              <button class="class-option selected" type="button" data-class-id="shooter">
+                <span class="class-option-title">Стрелок</span>
+                <span class="class-option-text">Текущий базовый карась без роли, подходит как отправная точка для баланса.</span>
+              </button>
+              <button class="class-option" type="button" data-class-id="engineer">
+                <span class="class-option-title">Инженер</span>
+                <span class="class-option-text">Базовый шаблон для технических умений, турелей и нестандартного оружия.</span>
+              </button>
+              <button class="class-option" type="button" data-class-id="medic">
+                <span class="class-option-title">Медик</span>
+                <span class="class-option-text">Базовый шаблон для лечения, поддержки команды и будущих баффов.</span>
+              </button>
+            </div>
             <button id="startButton" type="button">Старт</button>
             <p class="hint">MVP-прототип на HTML5 Canvas, без backend и сборки.</p>
           </div>
@@ -202,6 +260,7 @@
     </div>
 
     <script src="./src/Assets.js"></script>
+    <script src="./src/PlayerClasses.js"></script>
     <script src="./src/Bullet.js"></script>
     <script src="./src/Enemy.js"></script>
     <script src="./src/Obstacle.js"></script>

@@ -5,34 +5,50 @@ class Player {
     y,
     canvasHeight,
     controls = { riseKey: "Space" },
-    maxHealth = 100,
+    classId = window.PlayerClasses.defaultId,
   }) {
     this.id = id;
     this.x = x;
     this.y = y;
     this.canvasHeight = canvasHeight;
     this.controls = controls;
+    this.classId = classId;
+    this.classConfig = window.PlayerClasses.getConfig(classId);
     this.width = 84;
     this.height = 48;
     this.velocityY = 0;
-    this.riseAcceleration = -980;
-    this.fallAcceleration = 720;
-    this.maxRiseSpeed = -260;
-    this.maxFallSpeed = 320;
-    this.maxHealth = maxHealth;
-    this.health = maxHealth;
-    this.fireCooldown = 0.22;
+    this.riseAcceleration = this.classConfig.riseAcceleration;
+    this.fallAcceleration = this.classConfig.fallAcceleration;
+    this.maxRiseSpeed = this.classConfig.maxRiseSpeed;
+    this.maxFallSpeed = this.classConfig.maxFallSpeed;
+    this.maxHealth = this.classConfig.maxHealth;
+    this.health = this.maxHealth;
+    this.fireCooldown = this.classConfig.fireCooldown;
     this.fireTimer = 0;
     this.hasDoubleShot = false;
-    this.invulnerabilityDuration = 0.7;
+    this.invulnerabilityDuration = this.classConfig.invulnerabilityDuration;
     this.invulnerabilityTimer = 0;
     this.isPressingRise = false;
     this.active = true;
   }
 
+  applyClass(classId) {
+    this.classId = classId;
+    this.classConfig = window.PlayerClasses.getConfig(classId);
+    this.riseAcceleration = this.classConfig.riseAcceleration;
+    this.fallAcceleration = this.classConfig.fallAcceleration;
+    this.maxRiseSpeed = this.classConfig.maxRiseSpeed;
+    this.maxFallSpeed = this.classConfig.maxFallSpeed;
+    this.maxHealth = this.classConfig.maxHealth;
+    this.fireCooldown = this.classConfig.fireCooldown;
+    this.invulnerabilityDuration = this.classConfig.invulnerabilityDuration;
+    this.health = Math.min(this.health, this.maxHealth);
+  }
+
   reset(y) {
     this.y = y;
     this.velocityY = 0;
+    this.applyClass(this.classId);
     this.health = this.maxHealth;
     this.fireTimer = 0;
     this.hasDoubleShot = false;
@@ -69,14 +85,16 @@ class Player {
   shoot() {
     this.fireTimer = this.fireCooldown;
     const bulletX = this.x + this.width * 0.45;
-    const bulletOffsets = this.hasDoubleShot ? [-11, 11] : [2];
+    const bulletOffsets = this.hasDoubleShot
+      ? this.classConfig.doubleShotOffsets
+      : [this.classConfig.singleShotOffset];
 
     return bulletOffsets.map((offsetY) => new Bullet({
       x: bulletX,
       y: this.y + offsetY,
-      velocityX: 460,
-      radius: 5,
-      damage: 1,
+      velocityX: this.classConfig.bulletSpeed,
+      radius: this.classConfig.bulletRadius,
+      damage: this.classConfig.bulletDamage,
       ownerId: this.id,
     }));
   }
@@ -120,7 +138,16 @@ class Player {
     if (this.invulnerabilityTimer > 0) {
       ctx.globalAlpha = 0.6 + Math.sin(this.invulnerabilityTimer * 28) * 0.25;
     }
-    if (assets?.atlasImage) {
+    const classImage = assets?.[this.classConfig.spriteKey];
+    if (classImage) {
+      ctx.drawImage(
+        classImage,
+        this.width * this.classConfig.renderOffsetX,
+        this.height * this.classConfig.renderOffsetY,
+        this.width * this.classConfig.renderScaleX,
+        this.height * this.classConfig.renderScaleY,
+      );
+    } else if (assets?.atlasImage) {
       const sprite = assets.spriteMap.player;
       ctx.drawImage(
         assets.atlasImage,
@@ -128,10 +155,10 @@ class Player {
         sprite.sy,
         sprite.sw,
         sprite.sh,
-        -this.width * 0.62,
-        -this.height * 0.65,
-        this.width * 1.24,
-        this.height * 1.3,
+        this.width * this.classConfig.renderOffsetX,
+        this.height * this.classConfig.renderOffsetY,
+        this.width * this.classConfig.renderScaleX,
+        this.height * this.classConfig.renderScaleY,
       );
     } else {
       ctx.fillStyle = "#fb923c";
